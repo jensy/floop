@@ -1,17 +1,17 @@
 """
-Setup script for the AI Workflow MVP package.
+Setup script for the Floop AI workflow tool.
 """
 
 from setuptools import setup, find_packages
 
 setup(
-    name="ai-workflow-mvp",
+    name="floop",
     version="0.1.0",
-    description="AI Workflow MVP that orchestrates interactions between multiple AI models",
-    author="AI Workflow Team",
+    description="Floop - AI Workflow tool that orchestrates interactions between multiple AI models",
+    author="Floop Team",
     author_email="example@example.com",
     packages=find_packages(),
-    py_modules=["ai_workflow"],
+    py_modules=["floop"],
     install_requires=[
         "openai",
         "anthropic",
@@ -20,7 +20,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "ai-workflow=ai_workflow:cli",
+            "floop=floop:cli",
         ],
     },
     classifiers=[

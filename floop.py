@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-AI Workflow MVP
+Floop - AI Workflow Tool
 
-This script provides a command-line interface to the AI workflow MVP.
+This script provides a command-line interface to the Floop AI workflow tool.
 It orchestrates interactions between multiple AI models (ChatGPT and Claude)
 to process text input and generate responses.
 """
@@ -28,7 +28,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler("workflow.log"),
+        logging.FileHandler("floop.log"),
         logging.StreamHandler()
     ]
 )
@@ -66,7 +66,7 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
         format_type: str = "text", config: Optional[str] = None,
         legacy_mode: bool = False, web_search: Optional[str] = None):
     """
-    Run the AI workflow with the given input and model.
+    Run the Floop AI workflow with the given input and model.
     
     This tool orchestrates interactions between multiple AI models (ChatGPT and Claude)
     to process text input and generate responses.
@@ -153,7 +153,7 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
         else:
             # Print to console
             click.echo("\n" + "="*50)
-            click.echo(f"Workflow Result (model: {result.get('model', 'unknown')})")
+            click.echo(f"Floop Result (model: {result.get('model', 'unknown')})")
             click.echo("="*50)
             click.echo(display_output)
             click.echo("="*50)

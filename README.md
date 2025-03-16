@@ -1,6 +1,6 @@
-# AI Workflow MVP
+# Floop - AI Workflow Tool
 
-This project is a Minimum Viable Product (MVP) that orchestrates interactions between multiple AI models (OpenAI's ChatGPT and Anthropic's Claude) in a modular workflow. It allows users to leverage multiple Large Language Models (LLMs) in a coordinated pipeline for complex tasks on their local environment, ensuring control, flexibility, and privacy.
+This project is a tool that orchestrates interactions between multiple AI models (OpenAI's ChatGPT and Anthropic's Claude) in a modular workflow. It allows users to leverage multiple Large Language Models (LLMs) in a coordinated pipeline for complex tasks on their local environment, ensuring control, flexibility, and privacy.
 
 ## Features
 
@@ -26,8 +26,8 @@ This project is a Minimum Viable Product (MVP) that orchestrates interactions be
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/yourusername/ai-workflow-mvp.git
-   cd ai-workflow-mvp
+   git clone https://github.com/yourusername/floop.git
+   cd floop
    ```
 
 2. Create a virtual environment and activate it:
@@ -53,34 +53,34 @@ This project is a Minimum Viable Product (MVP) that orchestrates interactions be
 
 ```bash
 # Use ChatGPT (default)
-ai-workflow --input "Summarize this: The AI workflow MVP is a system that orchestrates multiple AI model interactions."
+floop --input "Summarize this: The Floop tool is a system that orchestrates multiple AI model interactions."
 
 # Use Claude
-ai-workflow --input "Explain quantum physics in simple terms" --use_claude
+floop --input "Explain quantum physics in simple terms" --use_claude
 
 # Multi-step workflow (Claude → ChatGPT)
-ai-workflow --input "Analyze this text" --model claude-first
+floop --input "Analyze this text" --model claude-first
 
 # Process input from a file
-ai-workflow --input_file document.txt --use_chatgpt
+floop --input_file document.txt --use_chatgpt
 
 # Process all text files in a directory (individually)
-ai-workflow --input_directory data/ --file_pattern "*.txt" --recursive
+floop --input_directory data/ --file_pattern "*.txt" --recursive
 
 # Process all text files in a directory (concatenated)
-ai-workflow --input_directory data/ --processing_strategy concatenate
+floop --input_directory data/ --processing_strategy concatenate
 
 # Save output to a file
-ai-workflow --input "Tell me a joke" --output_file joke.txt
+floop --input "Tell me a joke" --output_file joke.txt
 
 # Format output as markdown
-ai-workflow --input "Explain AI" --format markdown
+floop --input "Explain AI" --format markdown
 
 # Perform a web search
-ai-workflow --web_search "Latest developments in AI" --format markdown
+floop --web_search "Latest developments in AI" --format markdown
 
 # Perform a web search and save results to a file
-ai-workflow --web_search "Climate change solutions" --output_file climate_research.md
+floop --web_search "Climate change solutions" --output_file climate_research.md
 ```
 
 ### Configurable Workflows
@@ -89,10 +89,10 @@ You can define custom workflows using JSON configuration files:
 
 ```bash
 # Run a workflow with a configuration file
-ai-workflow --config configs/my_workflow.json
+floop --config configs/my_workflow.json
 
 # Override configuration values with CLI arguments
-ai-workflow --config configs/my_workflow.json --input "Custom input" --output_file custom_output.txt
+floop --config configs/my_workflow.json --input "Custom input" --output_file custom_output.txt
 ```
 
 #### Configuration File Format
@@ -231,7 +231,7 @@ The `processing_strategy` can be:
   - `config_workflow.py`: Configurable workflow orchestrator
   - `output_formatter.py`: Output formatting functions
 - `configs/`: Configuration files for workflows
-- `ai_workflow.py`: Main entry point
+- `floop.py`: Main entry point
 - `setup.py`: Package setup script
 - `.env`: Environment variables (API keys)
 
