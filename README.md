@@ -5,12 +5,13 @@ This project is a Minimum Viable Product (MVP) that orchestrates interactions be
 ## Features
 
 - **Multiple AI Model Support**: Interact with both OpenAI's ChatGPT and Anthropic's Claude.
-- **Flexible Input Handling**: Process input from direct text or files.
+- **Flexible Input Handling**: Process input from direct text, files, or directories.
 - **Multi-Step Workflows**: Chain AI models together (e.g., Claude → ChatGPT).
 - **Configurable Workflows**: Define custom workflows using JSON configuration files.
 - **Error Handling**: Robust error handling with retry logic for temporary failures.
 - **Output Formatting**: Clean and format AI responses for better readability.
 - **Command-Line Interface**: Easy-to-use CLI with various options.
+- **Directory Processing**: Process multiple files in a directory with individual or concatenated strategies.
 
 ## Installation
 
@@ -61,6 +62,12 @@ ai-workflow --input "Analyze this text" --model claude-first
 
 # Process input from a file
 ai-workflow --input_file document.txt --use_chatgpt
+
+# Process all text files in a directory (individually)
+ai-workflow --input_directory data/ --file_pattern "*.txt" --recursive
+
+# Process all text files in a directory (concatenated)
+ai-workflow --input_directory data/ --processing_strategy concatenate
 
 # Save output to a file
 ai-workflow --input "Tell me a joke" --output_file joke.txt
@@ -121,10 +128,47 @@ ai-workflow --config configs/my_workflow.json --input "Custom input" --output_fi
 }
 ```
 
+#### Directory Input Configuration
+
+You can also configure workflows to process multiple files in a directory:
+
+```json
+{
+  "name": "Directory Input Workflow",
+  "description": "A workflow that processes all text files in a directory",
+  "input": {
+    "type": "directory",
+    "path": "sample_data",
+    "file_pattern": "*.txt",
+    "recursive": true,
+    "processing_strategy": "individual"
+  },
+  "steps": [
+    {
+      "name": "summarize",
+      "model": "claude",
+      "prompt_template": "Summarize the following text in 2-3 sentences: {{input}}"
+    }
+  ],
+  "output": {
+    "type": "file",
+    "format": "markdown"
+  }
+}
+```
+
+The `processing_strategy` can be:
+- `individual`: Process each file separately (returns multiple results)
+- `concatenate`: Combine all files into a single input (returns a single result)
+
 ### Command-Line Options
 
 - `--input`, `-i`: Direct text input
 - `--input_file`, `-f`: Path to input file
+- `--input_directory`, `-d`: Path to input directory
+- `--file_pattern`: File pattern for directory input (default: *.txt)
+- `--recursive`: Search recursively in subdirectories
+- `--processing_strategy`: How to process directory files (individual or concatenate)
 - `--use_chatgpt`: Use ChatGPT model
 - `--use_claude`: Use Claude model
 - `--model`, `-m`: AI model to use (chatgpt, claude, claude-first)

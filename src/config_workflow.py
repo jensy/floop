@@ -6,6 +6,7 @@ loaded from JSON configuration files.
 """
 
 import os
+import sys
 import json
 import logging
 import re
@@ -13,12 +14,22 @@ from typing import Dict, Any, Optional, List, Union
 import click
 from dotenv import load_dotenv
 
+# Add the parent directory to sys.path to allow imports when run directly
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 # Import from src package
-from src.input_handler import process_input
-from src.chatgpt_client import call_chatgpt
-from src.claude_client import call_claude
-from src.output_formatter import format_output, format_for_display
-from src.workflow import run_workflow as run_legacy_workflow
+try:
+    # Try importing as a module first
+    from src.input_handler import process_input
+    from src.chatgpt_client import call_chatgpt
+    from src.claude_client import call_claude
+    from src.output_formatter import format_output, format_for_display, save_results_to_file
+except ModuleNotFoundError:
+    # If that fails, import directly
+    from input_handler import process_input
+    from chatgpt_client import call_chatgpt
+    from claude_client import call_claude
+    from output_formatter import format_output, format_for_display, save_results_to_file
 
 # Configure logging
 logging.basicConfig(
@@ -59,7 +70,11 @@ def load_config(config_path: str) -> Optional[Dict[str, Any]]:
         return None
 
 def get_input_from_config(config: Dict[str, Any], cli_input: Optional[str] = None, 
-                         cli_input_file: Optional[str] = None) -> Dict[str, Any]:
+                         cli_input_file: Optional[str] = None,
+                         cli_input_directory: Optional[str] = None,
+                         cli_file_pattern: str = "*.txt",
+                         cli_recursive: bool = False,
+                         cli_processing_strategy: str = "individual") -> Dict[str, Any]:
     """
     Get input from configuration or CLI arguments.
     
@@ -67,14 +82,19 @@ def get_input_from_config(config: Dict[str, Any], cli_input: Optional[str] = Non
         config: The workflow configuration
         cli_input: Direct text input from CLI (overrides config)
         cli_input_file: Path to input file from CLI (overrides config)
+        cli_input_directory: Path to input directory from CLI (overrides config)
+        cli_file_pattern: File pattern for directory input from CLI
+        cli_recursive: Whether to search recursively in subdirectories from CLI
+        cli_processing_strategy: How to process directory files from CLI
         
     Returns:
         Dictionary containing the processed input and metadata
     """
     # CLI arguments take precedence over configuration
-    if cli_input is not None or cli_input_file is not None:
+    if cli_input is not None or cli_input_file is not None or cli_input_directory is not None:
         logger.info("Using input from CLI arguments (overriding configuration)")
-        return process_input(cli_input, cli_input_file)
+        return process_input(cli_input, cli_input_file, cli_input_directory, 
+                           cli_file_pattern, cli_recursive, cli_processing_strategy)
     
     # Get input from configuration
     input_config = config.get('input', {})
@@ -88,6 +108,13 @@ def get_input_from_config(config: Dict[str, Any], cli_input: Optional[str] = Non
         input_path = input_config.get('path', '')
         logger.info(f"Using file input from configuration: {input_path}")
         return process_input(None, input_path)
+    elif input_type == 'directory':
+        input_path = input_config.get('path', '')
+        file_pattern = input_config.get('file_pattern', '*.txt')
+        recursive = input_config.get('recursive', False)
+        processing_strategy = input_config.get('processing_strategy', 'individual')
+        logger.info(f"Using directory input from configuration: {input_path}")
+        return process_input(None, None, input_path, file_pattern, recursive, processing_strategy)
     else:
         logger.error(f"Invalid input type in configuration: {input_type}")
         return {"error": f"Invalid input type: {input_type}", "text": None}
@@ -197,29 +224,29 @@ def handle_output(result: Dict[str, Any], config: Dict[str, Any],
     
     # Format the output
     formatted_result = format_output(result)
-    display_output = format_for_display(formatted_result, format_type)
     
     # Handle output based on type
     if output_type == 'file' and output_path:
         try:
-            # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            # Save results to file
+            success = save_results_to_file(formatted_result, output_path, format_type)
             
-            # Write output to file
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(display_output)
-            logger.info(f"Output saved to file: {output_path}")
-            
-            return {
-                "output_type": "file",
-                "output_path": output_path,
-                "format": format_type
-            }
+            if success:
+                logger.info(f"Output saved to file: {output_path}")
+                return {
+                    "output_type": "file",
+                    "output_path": output_path,
+                    "format": format_type
+                }
+            else:
+                logger.error("Failed to save output to file")
+                return {"error": "Failed to save output to file"}
         except Exception as e:
             logger.error(f"Error saving output to file: {str(e)}")
             return {"error": f"Error saving output to file: {str(e)}"}
     else:
         # Default to console output
+        display_output = format_for_display(formatted_result, format_type)
         return {
             "output_type": "console",
             "output": display_output,
@@ -230,6 +257,10 @@ def run_configurable_workflow(
     config: Dict[str, Any],
     input_text: Optional[str] = None,
     input_file: Optional[str] = None,
+    input_directory: Optional[str] = None,
+    file_pattern: str = "*.txt",
+    recursive: bool = False,
+    processing_strategy: str = "individual",
     output_file: Optional[str] = None,
     format_type: str = "text"
 ) -> Dict[str, Any]:
@@ -240,6 +271,10 @@ def run_configurable_workflow(
         config: The workflow configuration
         input_text: Direct text input (overrides config)
         input_file: Path to input file (overrides config)
+        input_directory: Path to input directory (overrides config)
+        file_pattern: File pattern for directory input
+        recursive: Whether to search recursively in subdirectories
+        processing_strategy: How to process directory files
         output_file: Path to output file (overrides config)
         format_type: Output format (overrides config)
         
@@ -247,65 +282,41 @@ def run_configurable_workflow(
         Dictionary containing the workflow result and metadata
     """
     # Get input
-    input_result = get_input_from_config(config, input_text, input_file)
+    input_result = get_input_from_config(
+        config, input_text, input_file, input_directory, 
+        file_pattern, recursive, processing_strategy
+    )
     
     if "error" in input_result:
-        logger.error(f"Input error: {input_result['error']}")
-        return {"error": input_result["error"], "result": None}
+        return input_result
     
-    # Initialize context with input
-    context = {
-        "input": input_result["text"]
-    }
+    # Get model configuration
+    model_config = config.get('model', {})
+    model_type = model_config.get('type', 'chatgpt')
     
-    # Execute each step in the workflow
-    steps = config.get('steps', [])
-    final_step_result = None
+    # Call AI model
+    if model_type == "chatgpt":
+        model_result = call_chatgpt(input_result)
+    elif model_type == "claude":
+        model_result = call_claude(input_result)
+    else:
+        return {"error": f"Invalid model type: {model_type}"}
     
-    for step_config in steps:
-        step_name = step_config.get('name', 'unnamed_step')
-        step_result = execute_step(step_config, context)
-        
-        if "error" in step_result:
-            logger.error(f"Step error: {step_result['error']}")
-            return {"error": step_result["error"], "result": None}
-        
-        # Add step result to context for use in subsequent steps
-        context[step_name] = step_result
-        final_step_result = step_result
-    
-    if not final_step_result:
-        logger.error("No steps were executed in the workflow")
-        return {"error": "No steps were executed", "result": None}
-    
-    # Prepare the result
-    result = {
-        "result": final_step_result["output"],
-        "model": final_step_result.get("model", "unknown"),
-        "input_source": input_result["source"],
-        "metadata": {
-            "model_info": final_step_result.get("model_info", "unknown"),
-            "usage": final_step_result.get("usage", {})
-        },
-        "steps": [step.get('name') for step in steps]
-    }
+    if "error" in model_result:
+        return model_result
     
     # Handle output
-    output_result = handle_output(result, config, output_file, format_type)
+    output_result = handle_output(model_result, config, output_file, format_type)
     
-    if "error" in output_result:
-        logger.error(f"Output error: {output_result['error']}")
-        return {"error": output_result["error"], "result": result}
-    
-    # Add output information to result
-    result["output"] = output_result
-    
-    logger.info("Workflow completed successfully")
-    return result
+    return output_result
 
 def run_workflow(
     input_text: Optional[str] = None,
     input_file: Optional[str] = None,
+    input_directory: Optional[str] = None,
+    file_pattern: str = "*.txt",
+    recursive: bool = False,
+    processing_strategy: str = "individual",
     model: Optional[str] = None,
     max_tokens: int = 1000,
     temperature: float = 0.7,
@@ -320,6 +331,10 @@ def run_workflow(
     Args:
         input_text: Direct text input
         input_file: Path to input file
+        input_directory: Path to input directory
+        file_pattern: File pattern for directory input
+        recursive: Whether to search recursively in subdirectories
+        processing_strategy: How to process directory files
         model: The AI model to use (for legacy mode)
         max_tokens: Maximum tokens in response (for legacy mode)
         temperature: Controls randomness (for legacy mode)
@@ -341,6 +356,10 @@ def run_workflow(
         return run_legacy_workflow(
             input_text=input_text,
             input_file=input_file,
+            input_directory=input_directory,
+            file_pattern=file_pattern,
+            recursive=recursive,
+            processing_strategy=processing_strategy,
             model=model or "chatgpt",
             max_tokens=max_tokens,
             temperature=temperature,
@@ -359,6 +378,10 @@ def run_workflow(
         config=config,
         input_text=input_text,
         input_file=input_file,
+        input_directory=input_directory,
+        file_pattern=file_pattern,
+        recursive=recursive,
+        processing_strategy=processing_strategy,
         output_file=output_file,
         format_type=format_type
     )
@@ -367,27 +390,38 @@ def run_workflow(
 @click.command()
 @click.option('--input', '-i', help='Direct text input')
 @click.option('--input_file', '-f', help='Path to input file')
+@click.option('--input_directory', '-d', help='Path to input directory')
+@click.option('--file_pattern', default='*.txt', help='File pattern for directory input (default: *.txt)')
+@click.option('--recursive', is_flag=True, help='Search recursively in subdirectories')
+@click.option('--processing_strategy', type=click.Choice(['individual', 'concatenate']), 
+              default='individual', help='How to process directory files')
 @click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude', 'claude-first']), 
               default='chatgpt', help='AI model to use (for legacy mode)')
 @click.option('--max_tokens', type=int, default=1000, help='Maximum tokens in response (for legacy mode)')
 @click.option('--temperature', type=float, default=0.7, help='Temperature (for legacy mode)')
 @click.option('--output_file', '-o', help='Path to output file')
-@click.option('--format', '-f', 'format_type', type=click.Choice(['text', 'markdown']), 
+@click.option('--format', 'format_type', type=click.Choice(['text', 'markdown', 'json', 'html']), 
               default='text', help='Output format')
 @click.option('--config', '-c', 'config_path', help='Path to workflow configuration file')
 @click.option('--legacy-mode', is_flag=True, help='Run in legacy mode (ignore configuration)')
 def cli(input: Optional[str] = None, input_file: Optional[str] = None, 
+        input_directory: Optional[str] = None, file_pattern: str = '*.txt',
+        recursive: bool = False, processing_strategy: str = 'individual',
         model: str = "chatgpt", max_tokens: int = 1000, temperature: float = 0.7,
         output_file: Optional[str] = None, format_type: str = "text",
         config_path: Optional[str] = None, legacy_mode: bool = False):
     """Run the AI workflow with the given input and model."""
     # If no input is provided, prompt the user
-    if input is None and input_file is None and not config_path:
+    if input is None and input_file is None and input_directory is None and not config_path:
         input = click.prompt("Enter your prompt")
     
     result = run_workflow(
         input_text=input,
         input_file=input_file,
+        input_directory=input_directory,
+        file_pattern=file_pattern,
+        recursive=recursive,
+        processing_strategy=processing_strategy,
         model=model,
         max_tokens=max_tokens,
         temperature=temperature,

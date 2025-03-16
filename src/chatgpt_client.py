@@ -26,7 +26,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def call_chatgpt(
-    prompt: str,
+    input_data: Union[str, Dict[str, Any]],
     model: str = "gpt-3.5-turbo",
     max_tokens: int = 1000,
     temperature: float = 0.7,
@@ -35,6 +35,68 @@ def call_chatgpt(
 ) -> Dict[str, Any]:
     """
     Send a request to OpenAI's ChatGPT API and return the response.
+    
+    Args:
+        input_data: The user's input text or a dictionary containing input data
+        model: The OpenAI model to use (default: gpt-3.5-turbo)
+        max_tokens: Maximum number of tokens in the response
+        temperature: Controls randomness (0-1)
+        max_retries: Maximum number of retries for temporary failures
+        retry_delay: Delay between retries in seconds
+        
+    Returns:
+        Dictionary containing the response text and metadata
+    """
+    # Extract the prompt from input_data
+    if isinstance(input_data, dict):
+        prompt = input_data.get("text", "")
+        source = input_data.get("source", "unknown")
+        
+        # Handle directory input
+        if source == "directory":
+            # If we have individual file results, process each one
+            if "files" in input_data and input_data.get("processing_strategy") == "individual":
+                results = []
+                for file_info in input_data["files"]:
+                    file_path = file_info.get("file_path", "unknown")
+                    content = file_info.get("content", "")
+                    
+                    logger.info(f"Processing file: {file_path}")
+                    file_result = call_chatgpt_single(content, model, max_tokens, temperature, max_retries, retry_delay)
+                    
+                    # Add file path to result
+                    file_result["file_path"] = file_path
+                    results.append(file_result)
+                
+                # Return combined results
+                return {
+                    "results": results,
+                    "model": model,
+                    "input_source": "directory",
+                    "directory_path": input_data.get("directory_path", "unknown"),
+                    "file_count": len(results),
+                    "processing_strategy": "individual",
+                    "metadata": {
+                        "successful_files": sum(1 for r in results if "error" not in r),
+                        "failed_files": sum(1 for r in results if "error" in r)
+                    }
+                }
+    else:
+        prompt = input_data
+    
+    # Call ChatGPT with the prompt
+    return call_chatgpt_single(prompt, model, max_tokens, temperature, max_retries, retry_delay)
+
+def call_chatgpt_single(
+    prompt: str,
+    model: str = "gpt-3.5-turbo",
+    max_tokens: int = 1000,
+    temperature: float = 0.7,
+    max_retries: int = 3,
+    retry_delay: float = 1.0
+) -> Dict[str, Any]:
+    """
+    Send a single request to OpenAI's ChatGPT API and return the response.
     
     Args:
         prompt: The user's input text

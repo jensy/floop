@@ -1,0 +1,18 @@
+{
+  "name": "Directory Concatenate Workflow",
+  "description": "A workflow that processes all text files in a directory as a single concatenated input",
+  "input": {
+    "type": "directory",
+    "path": "sample_data",
+    "file_pattern": "*.txt",
+    "recursive": true,
+    "processing_strategy": "concatenate"
+  },
+  "model": {
+    "type": "claude"
+  },
+  "output": {
+    "type": "file",
+    "format": "markdown"
+  }
+} 

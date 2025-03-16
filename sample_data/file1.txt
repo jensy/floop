@@ -1,0 +1,10 @@
+This is the first sample file.
+
+It contains information about artificial intelligence.
+AI is a field of computer science that focuses on creating machines that can perform tasks that typically require human intelligence.
+
+Key areas of AI include:
+- Machine Learning
+- Natural Language Processing
+- Computer Vision
+- Robotics 

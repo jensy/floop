@@ -1,0 +1,10 @@
+This is the third sample file, located in a subdirectory.
+
+It contains information about natural language processing.
+NLP is a field of AI that focuses on the interaction between computers and human language.
+
+Common NLP tasks include:
+- Text Classification
+- Sentiment Analysis
+- Machine Translation
+- Question Answering 

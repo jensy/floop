@@ -1,0 +1,9 @@
+This is the second sample file.
+
+It contains information about machine learning.
+Machine learning is a subset of AI that focuses on developing algorithms that can learn from and make predictions based on data.
+
+Types of machine learning include:
+- Supervised Learning
+- Unsupervised Learning
+- Reinforcement Learning 

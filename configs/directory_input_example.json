@@ -1,0 +1,27 @@
+{
+  "name": "Directory Input Workflow",
+  "description": "A workflow that processes all text files in a directory",
+  "input": {
+    "type": "directory",
+    "path": "sample_data",
+    "file_pattern": "*.txt",
+    "recursive": true,
+    "processing_strategy": "individual"
+  },
+  "steps": [
+    {
+      "name": "summarize",
+      "model": "claude",
+      "prompt_template": "Summarize the following text in 2-3 sentences: {{input}}"
+    },
+    {
+      "name": "extract_keywords",
+      "model": "claude",
+      "prompt_template": "Extract 3-5 key terms or concepts from the following text: {{input}}"
+    }
+  ],
+  "output": {
+    "type": "file",
+    "format": "markdown"
+  }
+} 
