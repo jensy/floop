@@ -1,0 +1,34 @@
+{
+  "name": "Toy Companies Research Workflow",
+  "description": "A workflow that searches for top toy companies in 2025, finds their CEOs and email addresses, and formats the information as a markdown list",
+  "version": "1.0",
+  "input": {
+    "type": "text",
+    "value": "Top toy companies in 2025"
+  },
+  "ai_models": [
+    {
+      "name": "web_search",
+      "task": "Find the most relevant toy companies in 2025",
+      "prompt_template": "What are the top 10 toy companies in 2025? Include major players like Lego, Mattel, Hasbro and any new emerging companies"
+    },
+    {
+      "name": "web_search",
+      "task": "Find the CEOs and email addresses of these toy companies",
+      "prompt_template": "Find the current CEOs and corporate email addresses or contact information for the following toy companies from the previous search results:\n\n{input}"
+    },
+    {
+      "name": "chatgpt",
+      "task": "Create a formatted markdown list of the toy companies with their CEOs and contact information",
+      "prompt_template": "Create a well-formatted markdown list of toy companies with their CEOs and contact information based on the following data. Format it with proper headings, bullet points, and organize it clearly by company.\n\nVery important: Use proper markdown syntax with double line breaks between elements and ensure each company is clearly separated. Make sure the output renders correctly in markdown viewers.\n\nInclude any relevant details about the companies if available:\n\n{input}",
+      "parameters": {
+        "max_tokens": 1500,
+        "temperature": 0.5
+      }
+    }
+  ],
+  "output": {
+    "type": "file",
+    "format": "markdown"
+  }
+} 

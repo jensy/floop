@@ -17,39 +17,47 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def clean_text(text: str) -> str:
+def clean_text(text: str, preserve_line_breaks: bool = True) -> str:
     """
     Clean and format text by removing unnecessary whitespace and fixing formatting issues.
     
     Args:
         text: The text to clean
+        preserve_line_breaks: Whether to preserve line breaks (useful for markdown)
         
     Returns:
         The cleaned text
     """
     if not text:
         return ""
-        
-    # Remove excessive whitespace
-    cleaned = re.sub(r'\s+', ' ', text)
+    
+    if preserve_line_breaks:
+        # Preserve line breaks but remove excessive horizontal whitespace
+        lines = text.split('\n')
+        cleaned_lines = [re.sub(r'\s+', ' ', line).strip() for line in lines]
+        cleaned = '\n'.join(cleaned_lines)
+    else:
+        # Remove excessive whitespace (both horizontal and vertical)
+        cleaned = re.sub(r'\s+', ' ', text)
     
     # Fix common formatting issues
     cleaned = cleaned.strip()
     
-    # Ensure proper sentence endings
-    if cleaned and not cleaned.endswith(('.', '!', '?', ':', ';')):
+    # Ensure proper sentence endings for non-markdown content
+    if not preserve_line_breaks and cleaned and not cleaned.endswith(('.', '!', '?', ':', ';')):
         cleaned += '.'
         
     logger.debug(f"Cleaned text (length: {len(cleaned)})")
     return cleaned
 
-def format_output(response: Dict[str, Any], include_metadata: bool = True) -> Dict[str, Any]:
+def format_output(response: Dict[str, Any], include_metadata: bool = True, format_type: str = "text") -> Dict[str, Any]:
     """
     Format the output from an AI model.
     
     Args:
         response: The response from the AI model
         include_metadata: Whether to include metadata in the output
+        format_type: The format type (text, markdown, json, html)
         
     Returns:
         The formatted output
@@ -57,20 +65,23 @@ def format_output(response: Dict[str, Any], include_metadata: bool = True) -> Di
     if not response:
         logger.warning("Invalid response format")
         return response
+    
+    # Determine if we should preserve line breaks (for markdown and html formats)
+    preserve_line_breaks = format_type in ["markdown", "html"]
         
     # Check if this is a directory result with multiple files
     if "results" in response:
         # Format each individual result
         for i, file_result in enumerate(response["results"]):
             if "text" in file_result:
-                file_result["text"] = clean_text(file_result["text"])
+                file_result["text"] = clean_text(file_result["text"], preserve_line_breaks)
                 
         logger.info(f"Formatted {len(response['results'])} file results")
         return response
     
     # Single result processing
     if "text" in response:
-        response["text"] = clean_text(response["text"])
+        response["text"] = clean_text(response["text"], preserve_line_breaks)
         
     # Format metadata if included
     if include_metadata and "metadata" in response:
@@ -136,7 +147,8 @@ def format_for_display(response: Dict[str, Any], format_type: str = "text") -> s
             output += f"## Step: {step_name}\n\n"
             output += f"**Task**: {task}\n\n"
         
-        # Add the main response
+        # Add the main response - preserve line breaks for markdown
+        # Ensure there are double line breaks between sections for proper markdown rendering
         output += f"## Result\n\n{response_text}\n\n"
         
         # Add metadata

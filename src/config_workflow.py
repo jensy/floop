@@ -171,7 +171,19 @@ def execute_step(step_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
     
     # Process the prompt template with the current context
     try:
-        input_data = prompt_template.format(**context)
+        # For web search, we need to extract the actual query from the prompt template
+        if model == 'web_search':
+            # If the prompt template is just {input}, use the input directly
+            if prompt_template == '{input}':
+                input_data = context.get('input', '')
+            else:
+                # Otherwise, format the prompt template and use that as the query
+                input_data = prompt_template.format(**context)
+            
+            logger.info(f"Web search query: {input_data}")
+        else:
+            # For other models, format the prompt template normally
+            input_data = prompt_template.format(**context)
     except KeyError as e:
         logger.error(f"Error formatting prompt template: {str(e)}")
         return {"error": f"Missing context variable: {str(e)}", "output": None}
@@ -237,8 +249,8 @@ def handle_output(result: Dict[str, Any], config: Dict[str, Any],
     
     logger.info(f"Using output format: {format_type}")
     
-    # Format the output
-    formatted_result = format_output(result)
+    # Format the output - pass the format_type to preserve line breaks for markdown
+    formatted_result = format_output(result, include_metadata=True, format_type=format_type)
     
     # Handle output based on type
     if output_type == 'file' or output_path:
@@ -339,16 +351,22 @@ def run_configurable_workflow(
             step_config = {
                 'name': f'step_{i+1}',
                 'model': model_name,
-                'prompt_template': '{input}',
+                'prompt_template': model_config.get('prompt_template', '{input}'),
                 'model_params': model_config.get('parameters', {}),
                 'task': task
             }
+            
+            # Log the current context
+            logger.info(f"Context before step {i+1}: input = {context.get('input', '')[:100]}...")
             
             # Execute the step
             step_result = execute_step(step_config, context)
             
             if "error" in step_result:
                 return step_result
+            
+            # Log the step result
+            logger.info(f"Step {i+1} result: {step_result.get('output', '')[:100]}...")
             
             # Add step result to context for next step
             context[f'step_{i+1}'] = step_result
