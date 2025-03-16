@@ -1,0 +1,7 @@
+This is a sample text file for testing the input handler.
+
+It contains multiple lines of text to demonstrate that our input handler can read and process files correctly.
+
+The input handler should be able to read this entire file and return its content as a string.
+
+This will be used to test the file reading functionality of our AI workflow MVP. 
