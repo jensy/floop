@@ -1,0 +1,45 @@
+{
+  "name": "Sample Multi-Step Workflow",
+  "description": "A sample workflow that chains multiple AI models together",
+  "input": {
+    "type": "text",
+    "value": "Analyze the impact of artificial intelligence on healthcare."
+  },
+  "steps": [
+    {
+      "name": "initial_analysis",
+      "model": "claude",
+      "model_params": {
+        "model": "claude-3-sonnet-20240229",
+        "max_tokens": 1000,
+        "temperature": 0.7
+      },
+      "prompt_template": "{input}"
+    },
+    {
+      "name": "refinement",
+      "model": "chatgpt",
+      "model_params": {
+        "model": "gpt-3.5-turbo",
+        "max_tokens": 1000,
+        "temperature": 0.5
+      },
+      "prompt_template": "Refine and expand on this analysis: {initial_analysis.output}"
+    },
+    {
+      "name": "summary",
+      "model": "claude",
+      "model_params": {
+        "model": "claude-3-sonnet-20240229",
+        "max_tokens": 500,
+        "temperature": 0.3
+      },
+      "prompt_template": "Summarize the key points from this refined analysis in bullet points: {refinement.output}"
+    }
+  ],
+  "output": {
+    "type": "file",
+    "path": "results/ai_healthcare_analysis.txt",
+    "format": "markdown"
+  }
+} 

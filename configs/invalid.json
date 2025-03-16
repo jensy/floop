@@ -1,0 +1,8 @@
+{
+  "name": "Invalid Configuration",
+  "description": "This configuration is missing required fields",
+  "input": {
+    "type": "text",
+    "value": "This is a test."
+  }
+} 

@@ -1,0 +1,24 @@
+{
+  "name": "Missing File Configuration",
+  "description": "This configuration references a non-existent input file",
+  "input": {
+    "type": "file",
+    "path": "non_existent_file.txt"
+  },
+  "steps": [
+    {
+      "name": "analysis",
+      "model": "chatgpt",
+      "model_params": {
+        "model": "gpt-3.5-turbo",
+        "max_tokens": 500,
+        "temperature": 0.7
+      },
+      "prompt_template": "Analyze this text: {input}"
+    }
+  ],
+  "output": {
+    "type": "console",
+    "format": "text"
+  }
+} 
