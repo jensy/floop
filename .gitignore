@@ -44,6 +44,7 @@ workflow.log
 *.log
 output/
 results/
+docs/
 
 # API keys and sensitive information
 # .env is already included above
@@ -59,6 +60,3 @@ datasets/
 # Temporary files
 tmp/
 temp/ 
-
-# Docs
-docs/
