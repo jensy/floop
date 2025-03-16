@@ -23,12 +23,14 @@ try:
     from src.input_handler import process_input
     from src.chatgpt_client import call_chatgpt
     from src.claude_client import call_claude
+    from src.web_search_client import call_web_search
     from src.output_formatter import format_output, format_for_display, save_results_to_file
 except ModuleNotFoundError:
     # If that fails, import directly
     from input_handler import process_input
     from chatgpt_client import call_chatgpt
     from claude_client import call_claude
+    from web_search_client import call_web_search
     from output_formatter import format_output, format_for_display, save_results_to_file
 
 # Configure logging
@@ -74,7 +76,8 @@ def get_input_from_config(config: Dict[str, Any], cli_input: Optional[str] = Non
                          cli_input_directory: Optional[str] = None,
                          cli_file_pattern: str = "*.txt",
                          cli_recursive: bool = False,
-                         cli_processing_strategy: str = "individual") -> Dict[str, Any]:
+                         cli_processing_strategy: str = "individual",
+                         cli_web_search: Optional[str] = None) -> Dict[str, Any]:
     """
     Get input from configuration or CLI arguments.
     
@@ -86,12 +89,16 @@ def get_input_from_config(config: Dict[str, Any], cli_input: Optional[str] = Non
         cli_file_pattern: File pattern for directory input from CLI
         cli_recursive: Whether to search recursively in subdirectories from CLI
         cli_processing_strategy: How to process directory files from CLI
+        cli_web_search: Web search query from CLI (overrides config)
         
     Returns:
         Dictionary containing the processed input and metadata
     """
     # CLI arguments take precedence over configuration
-    if cli_input is not None or cli_input_file is not None or cli_input_directory is not None:
+    if cli_web_search is not None:
+        logger.info("Using web search query from CLI arguments (overriding configuration)")
+        return {"text": cli_web_search, "source": "web_search_query"}
+    elif cli_input is not None or cli_input_file is not None or cli_input_directory is not None:
         logger.info("Using input from CLI arguments (overriding configuration)")
         return process_input(cli_input, cli_input_file, cli_input_directory, 
                            cli_file_pattern, cli_recursive, cli_processing_strategy)
@@ -148,40 +155,40 @@ def process_template(template: str, context: Dict[str, Any]) -> str:
 
 def execute_step(step_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Execute a single workflow step.
+    Execute a single workflow step based on the provided configuration and context.
     
     Args:
-        step_config: Configuration for the step
-        context: Context containing input and outputs from previous steps
+        step_config: The step configuration
+        context: The current context containing previous step results
         
     Returns:
         Dictionary containing the step result and metadata
     """
     step_name = step_config.get('name', 'unnamed_step')
-    model = step_config.get('model')
-    model_params = step_config.get('model_params', {})
+    model = step_config.get('model', 'chatgpt')
     prompt_template = step_config.get('prompt_template', '{input}')
+    model_params = step_config.get('model_params', {})
     
-    # Process the prompt template
-    prompt = process_template(prompt_template, context)
+    # Process the prompt template with the current context
+    try:
+        input_data = prompt_template.format(**context)
+    except KeyError as e:
+        logger.error(f"Error formatting prompt template: {str(e)}")
+        return {"error": f"Missing context variable: {str(e)}", "output": None}
     
-    logger.info(f"Executing step: {step_name} with model: {model}")
+    logger.info(f"Executing step {step_name} with model {model}")
     
     # Execute the step based on the model
     if model == 'chatgpt':
-        response = call_chatgpt(
-            prompt=prompt,
-            model=model_params.get('model', 'gpt-3.5-turbo'),
-            max_tokens=model_params.get('max_tokens', 1000),
-            temperature=model_params.get('temperature', 0.7)
-        )
+        max_tokens = model_params.get('max_tokens', 1000)
+        temperature = model_params.get('temperature', 0.7)
+        response = call_chatgpt(input_data, max_tokens=max_tokens, temperature=temperature)
     elif model == 'claude':
-        response = call_claude(
-            prompt=prompt,
-            model=model_params.get('model', 'claude-3-sonnet-20240229'),
-            max_tokens=model_params.get('max_tokens', 1000),
-            temperature=model_params.get('temperature', 0.7)
-        )
+        max_tokens = model_params.get('max_tokens', 1000)
+        temperature = model_params.get('temperature', 0.7)
+        response = call_claude(input_data, max_tokens=max_tokens, temperature=temperature)
+    elif model == 'web_search':
+        response = call_web_search(input_data)
     else:
         logger.error(f"Invalid model: {model}")
         return {"error": f"Invalid model: {model}", "output": None}
@@ -191,12 +198,18 @@ def execute_step(step_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[s
         logger.error(f"Error in step {step_name}: {response['error']}")
         return {"error": response["error"], "output": None}
     
-    # Return the result
+    # Extract the output text from the response
+    output_text = response.get("text", "")
+    
+    # Return the result with all necessary fields for formatting
     return {
-        "output": response["text"],
+        "output": output_text,
+        "text": output_text,
         "model": model,
-        "model_info": response.get("model", "unknown"),
-        "usage": response.get("usage", {})
+        "model_info": response.get("model", model),
+        "usage": response.get("usage", {}),
+        "step_name": step_name,
+        "task": step_config.get('task', f'Step {step_name}')
     }
 
 def handle_output(result: Dict[str, Any], config: Dict[str, Any], 
@@ -222,25 +235,32 @@ def handle_output(result: Dict[str, Any], config: Dict[str, Any],
     output_path = cli_output_file or output_config.get('path')
     format_type = cli_format_type or output_config.get('format', 'text')
     
+    logger.info(f"Using output format: {format_type}")
+    
     # Format the output
     formatted_result = format_output(result)
     
     # Handle output based on type
-    if output_type == 'file' and output_path:
+    if output_type == 'file' or output_path:
         try:
-            # Save results to file
-            success = save_results_to_file(formatted_result, output_path, format_type)
+            # Format the output for display based on the format type
+            display_output = format_for_display(formatted_result, format_type)
             
-            if success:
-                logger.info(f"Output saved to file: {output_path}")
-                return {
-                    "output_type": "file",
-                    "output_path": output_path,
-                    "format": format_type
-                }
-            else:
-                logger.error("Failed to save output to file")
-                return {"error": "Failed to save output to file"}
+            # Create directory if it doesn't exist
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            
+            # Save results to file
+            with open(output_path, 'w', encoding='utf-8') as f:
+                f.write(display_output)
+            
+            logger.info(f"Output saved to file: {output_path}")
+            return {
+                "output_type": "file",
+                "output_path": output_path,
+                "format": format_type,
+                "result": formatted_result,
+                "output": display_output
+            }
         except Exception as e:
             logger.error(f"Error saving output to file: {str(e)}")
             return {"error": f"Error saving output to file: {str(e)}"}
@@ -250,7 +270,8 @@ def handle_output(result: Dict[str, Any], config: Dict[str, Any],
         return {
             "output_type": "console",
             "output": display_output,
-            "format": format_type
+            "format": format_type,
+            "result": formatted_result
         }
 
 def run_configurable_workflow(
@@ -262,7 +283,8 @@ def run_configurable_workflow(
     recursive: bool = False,
     processing_strategy: str = "individual",
     output_file: Optional[str] = None,
-    format_type: str = "text"
+    format_type: str = "text",
+    web_search: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run a workflow based on a configuration.
@@ -277,6 +299,7 @@ def run_configurable_workflow(
         processing_strategy: How to process directory files
         output_file: Path to output file (overrides config)
         format_type: Output format (overrides config)
+        web_search: Web search query (overrides config)
         
     Returns:
         Dictionary containing the workflow result and metadata
@@ -284,31 +307,97 @@ def run_configurable_workflow(
     # Get input
     input_result = get_input_from_config(
         config, input_text, input_file, input_directory, 
-        file_pattern, recursive, processing_strategy
+        file_pattern, recursive, processing_strategy, web_search
     )
     
     if "error" in input_result:
         return input_result
     
-    # Get model configuration
-    model_config = config.get('model', {})
-    model_type = model_config.get('type', 'chatgpt')
+    # Get output configuration
+    output_config = config.get('output', {})
+    config_format_type = output_config.get('format', 'text')
     
-    # Call AI model
-    if model_type == "chatgpt":
-        model_result = call_chatgpt(input_result)
-    elif model_type == "claude":
-        model_result = call_claude(input_result)
+    # CLI format type takes precedence over configuration
+    if not format_type or format_type == "text":
+        format_type = config_format_type
+    
+    logger.info(f"Using format type: {format_type}")
+    
+    # Check if we have AI models defined in the configuration
+    if 'ai_models' in config:
+        # Process AI models in sequence
+        context = {'input': input_result.get('text', '')}
+        steps = []
+        
+        for i, model_config in enumerate(config['ai_models']):
+            model_name = model_config.get('name')
+            task = model_config.get('task', f'Step {i+1}')
+            
+            logger.info(f"Processing AI model: {model_name} - {task}")
+            
+            # Create step configuration
+            step_config = {
+                'name': f'step_{i+1}',
+                'model': model_name,
+                'prompt_template': '{input}',
+                'model_params': model_config.get('parameters', {}),
+                'task': task
+            }
+            
+            # Execute the step
+            step_result = execute_step(step_config, context)
+            
+            if "error" in step_result:
+                return step_result
+            
+            # Add step result to context for next step
+            context[f'step_{i+1}'] = step_result
+            context['input'] = step_result.get('output', '')
+            
+            # Add step to steps list
+            steps.append(f'step_{i+1}')
+        
+        # Use the last step's result as the final result
+        final_step = f'step_{len(config["ai_models"])}'
+        final_result = context.get(final_step, {})
+        
+        # Add steps to the final result
+        final_result['steps'] = steps
+        
+        # Add all step results to the final result
+        for step in steps:
+            final_result[step] = context.get(step, {})
+        
+        # Handle output
+        output_result = handle_output(final_result, config, output_file, format_type)
+        
+        return output_result
     else:
-        return {"error": f"Invalid model type: {model_type}"}
-    
-    if "error" in model_result:
-        return model_result
-    
-    # Handle output
-    output_result = handle_output(model_result, config, output_file, format_type)
-    
-    return output_result
+        # Get model configuration
+        model_config = config.get('model', {})
+        model_type = model_config.get('type', 'chatgpt')
+        
+        # Check if web search is requested
+        if web_search is not None:
+            model_type = "web_search"
+        
+        # Call AI model
+        if model_type == "chatgpt":
+            model_result = call_chatgpt(input_result)
+        elif model_type == "claude":
+            model_result = call_claude(input_result)
+        elif model_type == "web_search":
+            model_result = call_web_search(input_result)
+        else:
+            return {"error": f"Invalid model type: {model_type}"}
+        
+        if "error" in model_result:
+            return model_result
+        
+        # Handle output
+        output_result = handle_output(model_result, config, output_file, format_type)
+        
+        return output_result
 
 def run_workflow(
     input_text: Optional[str] = None,
@@ -323,7 +412,8 @@ def run_workflow(
     format_type: str = "text",
     config_path: Optional[str] = None,
     legacy_mode: bool = False,
-    output_file: Optional[str] = None
+    output_file: Optional[str] = None,
+    web_search: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run a workflow based on configuration or legacy mode.
@@ -342,6 +432,7 @@ def run_workflow(
         config_path: Path to workflow configuration file
         legacy_mode: Whether to run in legacy mode
         output_file: Path to output file
+        web_search: Web search query (overrides other input methods)
         
     Returns:
         Dictionary containing the workflow result and metadata
@@ -383,7 +474,8 @@ def run_workflow(
         recursive=recursive,
         processing_strategy=processing_strategy,
         output_file=output_file,
-        format_type=format_type
+        format_type=format_type,
+        web_search=web_search
     )
 
 # CLI interface using Click
@@ -395,7 +487,7 @@ def run_workflow(
 @click.option('--recursive', is_flag=True, help='Search recursively in subdirectories')
 @click.option('--processing_strategy', type=click.Choice(['individual', 'concatenate']), 
               default='individual', help='How to process directory files')
-@click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude', 'claude-first']), 
+@click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude', 'claude-first', 'web_search']), 
               default='chatgpt', help='AI model to use (for legacy mode)')
 @click.option('--max_tokens', type=int, default=1000, help='Maximum tokens in response (for legacy mode)')
 @click.option('--temperature', type=float, default=0.7, help='Temperature (for legacy mode)')
@@ -404,12 +496,14 @@ def run_workflow(
               default='text', help='Output format')
 @click.option('--config', '-c', 'config_path', help='Path to workflow configuration file')
 @click.option('--legacy-mode', is_flag=True, help='Run in legacy mode (ignore configuration)')
+@click.option('--web_search', '-ws', help='Web search query (overrides other input methods)')
 def cli(input: Optional[str] = None, input_file: Optional[str] = None, 
         input_directory: Optional[str] = None, file_pattern: str = '*.txt',
         recursive: bool = False, processing_strategy: str = 'individual',
         model: str = "chatgpt", max_tokens: int = 1000, temperature: float = 0.7,
         output_file: Optional[str] = None, format_type: str = "text",
-        config_path: Optional[str] = None, legacy_mode: bool = False):
+        config_path: Optional[str] = None, legacy_mode: bool = False,
+        web_search: Optional[str] = None):
     """Run the AI workflow with the given input and model."""
     # If no input is provided, prompt the user
     if input is None and input_file is None and input_directory is None and not config_path:
@@ -428,7 +522,8 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
         format_type=format_type,
         config_path=config_path,
         legacy_mode=legacy_mode,
-        output_file=output_file
+        output_file=output_file,
+        web_search=web_search
     )
     
     if "error" in result:

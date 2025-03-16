@@ -5,6 +5,7 @@ This project is a Minimum Viable Product (MVP) that orchestrates interactions be
 ## Features
 
 - **Multiple AI Model Support**: Interact with both OpenAI's ChatGPT and Anthropic's Claude.
+- **Web Search Integration**: Perform web searches to retrieve up-to-date information from the internet.
 - **Flexible Input Handling**: Process input from direct text, files, or directories.
 - **Multi-Step Workflows**: Chain AI models together (e.g., Claude → ChatGPT).
 - **Configurable Workflows**: Define custom workflows using JSON configuration files.
@@ -74,6 +75,12 @@ ai-workflow --input "Tell me a joke" --output_file joke.txt
 
 # Format output as markdown
 ai-workflow --input "Explain AI" --format markdown
+
+# Perform a web search
+ai-workflow --web_search "Latest developments in AI" --format markdown
+
+# Perform a web search and save results to a file
+ai-workflow --web_search "Climate change solutions" --output_file climate_research.md
 ```
 
 ### Configurable Workflows
@@ -128,6 +135,39 @@ ai-workflow --config configs/my_workflow.json --input "Custom input" --output_fi
 }
 ```
 
+#### Web Search Configuration
+
+You can create workflows that incorporate web search capabilities:
+
+```json
+{
+  "name": "Web Search Example Workflow",
+  "description": "A workflow that uses web search to find information and then processes it with ChatGPT",
+  "input": {
+    "type": "text",
+    "value": "What are the latest developments in AI?"
+  },
+  "ai_models": [
+    {
+      "name": "web_search",
+      "task": "Find recent articles on AI developments and breakthroughs"
+    },
+    {
+      "name": "chatgpt",
+      "task": "Summarize the retrieved articles into a concise report",
+      "parameters": {
+        "max_tokens": 1000,
+        "temperature": 0.7
+      }
+    }
+  ],
+  "output": {
+    "type": "text",
+    "format": "markdown"
+  }
+}
+```
+
 #### Directory Input Configuration
 
 You can also configure workflows to process multiple files in a directory:
@@ -171,19 +211,21 @@ The `processing_strategy` can be:
 - `--processing_strategy`: How to process directory files (individual or concatenate)
 - `--use_chatgpt`: Use ChatGPT model
 - `--use_claude`: Use Claude model
-- `--model`, `-m`: AI model to use (chatgpt, claude, claude-first)
+- `--model`, `-m`: AI model to use (chatgpt, claude, claude-first, web_search)
 - `--max_tokens`: Maximum tokens in response (default: 1000)
 - `--temperature`: Temperature (randomness) (default: 0.7)
 - `--output_file`, `-o`: Path to output file
-- `--format`: Output format (text, markdown)
+- `--format`: Output format (text, markdown, json, html)
 - `--config`, `-c`: Path to workflow configuration file
 - `--legacy-mode`: Run in legacy mode (ignore configuration)
+- `--web_search`, `-ws`: Web search query (overrides other input methods)
 
 ## Project Structure
 
 - `src/`: Source code directory
   - `chatgpt_client.py`: OpenAI (ChatGPT) API client
   - `claude_client.py`: Anthropic (Claude) API client
+  - `web_search_client.py`: Web search client using OpenAI's API
   - `input_handler.py`: Input handling functions
   - `workflow.py`: Legacy workflow orchestrator
   - `config_workflow.py`: Configurable workflow orchestrator
@@ -219,6 +261,7 @@ Several example workflows are provided in the `configs/` directory:
 - `file_input_example.json`: Workflow that reads input from a file
 - `file_output_example.json`: Workflow that writes output to a file
 - `workflow_config.json`: Multi-step workflow that chains multiple models
+- `web_search_example.json`: Workflow that performs a web search and processes the results
 
 ## License
 

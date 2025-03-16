@@ -47,7 +47,7 @@ load_dotenv()
               default='individual', help='How to process directory files (default: individual)')
 @click.option('--use_chatgpt', is_flag=True, help='Use ChatGPT model')
 @click.option('--use_claude', is_flag=True, help='Use Claude model')
-@click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude', 'claude-first']), 
+@click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude', 'claude-first', 'web_search']), 
               default=None, help='AI model to use (alternative to --use_* flags)')
 @click.option('--max_tokens', type=int, default=1000, help='Maximum tokens in response')
 @click.option('--temperature', type=float, default=0.7, help='Temperature (randomness)')
@@ -56,6 +56,7 @@ load_dotenv()
               default='text', help='Output format')
 @click.option('--config', '-c', help='Path to workflow configuration file')
 @click.option('--legacy-mode', is_flag=True, help='Run in legacy mode (ignore configuration)')
+@click.option('--web_search', '-ws', help='Web search query (overrides other input methods)')
 def cli(input: Optional[str] = None, input_file: Optional[str] = None, 
         input_directory: Optional[str] = None, file_pattern: str = '*.txt',
         recursive: bool = False, processing_strategy: str = 'individual',
@@ -63,13 +64,18 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
         model: Optional[str] = None, max_tokens: int = 1000, 
         temperature: float = 0.7, output_file: Optional[str] = None,
         format_type: str = "text", config: Optional[str] = None,
-        legacy_mode: bool = False):
+        legacy_mode: bool = False, web_search: Optional[str] = None):
     """
     Run the AI workflow with the given input and model.
     
     This tool orchestrates interactions between multiple AI models (ChatGPT and Claude)
     to process text input and generate responses.
     """
+    # If web search is provided, set the model to web_search
+    if web_search is not None:
+        model = "web_search"
+        input = web_search
+    
     # If legacy mode is explicitly requested or no config is provided, use legacy workflow
     if legacy_mode or not config:
         # Determine the model to use
@@ -84,7 +90,7 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
                 model = "chatgpt"  # Default to ChatGPT
         
         # If no input is provided, prompt the user
-        if input is None and input_file is None and input_directory is None:
+        if input is None and input_file is None and input_directory is None and web_search is None:
             input = click.prompt("Enter your prompt")
         
         logger.info(f"Running legacy workflow with model: {model}")
@@ -97,7 +103,8 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
             processing_strategy=processing_strategy,
             model=model,
             output_file=output_file,
-            format_type=format_type
+            format_type=format_type,
+            web_search=web_search
         )
     else:
         # Run configurable workflow
@@ -112,7 +119,8 @@ def cli(input: Optional[str] = None, input_file: Optional[str] = None,
             config_path=config,
             legacy_mode=False,
             output_file=output_file,
-            format_type=format_type
+            format_type=format_type,
+            web_search=web_search
         )
     
     if "error" in result:

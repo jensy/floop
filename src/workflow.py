@@ -22,12 +22,14 @@ try:
     from src.input_handler import process_input
     from src.chatgpt_client import call_chatgpt
     from src.claude_client import call_claude
+    from src.web_search_client import call_web_search
     from src.output_formatter import format_output, format_for_display, save_results_to_file
 except ModuleNotFoundError:
     # If that fails, import directly
     from input_handler import process_input
     from chatgpt_client import call_chatgpt
     from claude_client import call_claude
+    from web_search_client import call_web_search
     from output_formatter import format_output, format_for_display, save_results_to_file
 
 # Configure logging
@@ -42,7 +44,7 @@ load_dotenv()
 
 def process_single_input(
     input_content: str,
-    model: Literal["chatgpt", "claude", "claude-first"] = "chatgpt",
+    model: Literal["chatgpt", "claude", "claude-first", "web_search"] = "chatgpt",
     max_tokens: int = 1000,
     temperature: float = 0.7,
     source_info: Dict[str, Any] = None
@@ -67,6 +69,9 @@ def process_single_input(
     elif model == "claude":
         logger.info("Running workflow with Claude...")
         response = call_claude(input_content, max_tokens=max_tokens, temperature=temperature)
+    elif model == "web_search":
+        logger.info("Running workflow with web search...")
+        response = call_web_search(input_content)
     elif model == "claude-first":
         logger.info("Running multi-step workflow (Claude -> ChatGPT)...")
         
@@ -125,7 +130,8 @@ def run_workflow(
     processing_strategy: str = "individual",
     model: str = "chatgpt",
     output_file: Optional[str] = None,
-    format_type: str = "text"
+    format_type: str = "text",
+    web_search: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Run the AI workflow.
@@ -140,15 +146,22 @@ def run_workflow(
         model: AI model to use
         output_file: Path to output file
         format_type: Output format
+        web_search: Web search query (overrides other input methods)
         
     Returns:
         Dictionary containing the workflow result and metadata
     """
     logger = logging.getLogger(__name__)
     
-    # Process input
-    input_result = process_input(input_text, input_file, input_directory, 
-                               file_pattern, recursive, processing_strategy)
+    # Check if web search is provided
+    if web_search:
+        logger.info(f"Using web search query: {web_search}")
+        input_result = {"text": web_search, "source": "web_search_query"}
+        model = "web_search"
+    else:
+        # Process input
+        input_result = process_input(input_text, input_file, input_directory, 
+                                   file_pattern, recursive, processing_strategy)
     
     if "error" in input_result:
         return input_result
@@ -158,6 +171,8 @@ def run_workflow(
         model_result = call_chatgpt(input_result)
     elif model == "claude":
         model_result = call_claude(input_result)
+    elif model == "web_search":
+        model_result = call_web_search(input_result)
     else:
         return {"error": f"Invalid model: {model}"}
     
@@ -204,14 +219,16 @@ def run_workflow(
 @click.option('--processing_strategy', type=click.Choice(['individual', 'concatenate']), 
               default='individual', help='How to process directory files (default: individual)')
 @click.option('--output_file', '-o', help='Path to output file')
-@click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude']), default='chatgpt',
+@click.option('--model', '-m', type=click.Choice(['chatgpt', 'claude', 'web_search']), default='chatgpt',
               help='AI model to use (default: chatgpt)')
 @click.option('--format', '-fmt', type=click.Choice(['text', 'json', 'markdown', 'html']), 
               default='text', help='Output format (default: text)')
 @click.option('--config', '-c', help='Path to workflow configuration file')
+@click.option('--web_search', '-ws', help='Web search query (overrides other input methods)')
 def cli(input: Optional[str], input_file: Optional[str], input_directory: Optional[str],
         file_pattern: str, recursive: bool, processing_strategy: str,
-        output_file: Optional[str], model: str, format: str, config: Optional[str]):
+        output_file: Optional[str], model: str, format: str, config: Optional[str],
+        web_search: Optional[str]):
     """Run the AI workflow from the command line."""
     try:
         # Load environment variables
@@ -249,7 +266,8 @@ def cli(input: Optional[str], input_file: Optional[str], input_directory: Option
                 recursive=recursive,
                 processing_strategy=processing_strategy,
                 output_file=output_file,
-                format_type=format
+                format_type=format,
+                web_search=web_search
             )
         else:
             # Run standard workflow
@@ -262,7 +280,8 @@ def cli(input: Optional[str], input_file: Optional[str], input_directory: Option
                 processing_strategy=processing_strategy,
                 model=model,
                 output_file=output_file,
-                format_type=format
+                format_type=format,
+                web_search=web_search
             )
         
         # Check for errors
